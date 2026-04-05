@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Adafruit Dashboard</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="mminh IoT">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/565/565547.png">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 800px; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; text-align: center; }
+        input[type="number"] { width: 60px; padding: 5px; margin: 10px; }
+        button { padding: 8px 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+        .led-btn { background-color: #28a745; width: 100%; font-size: 1.2em; margin-top: 10px; }
+        canvas { max-height: 300px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>DASHBOARD ĐIỀU KHIỂN ESP32</h2>
+    <p id="status">Trạng thái: Đang kết nối...</p>
+
+    <div class="controls">
+        <div class="card">
+            <h3>Nhiệt độ (°C)</h3>
+            <input type="number" id="tempInput" value="25">
+            <button onclick="publishData('temp', 'tempInput')">Gửi</button>
+            <p>Hiện tại: <span id="tempVal">--</span>°C</p>
+        </div>
+
+        <div class="card">
+            <h3>Độ ẩm (%)</h3>
+            <input type="number" id="humInput" value="60">
+            <button onclick="publishData('humidity', 'humInput')">Gửi</button>
+            <p>Hiện tại: <span id="humVal">--</span>%</p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h3>Điều khiển LED</h3>
+        <button class="led-btn" id="ledBtn" onclick="toggleLED()">BẬT ĐÈN</button>
+    </div>
+
+    <canvas id="myChart"></canvas>
+</div>
+
+<script>
+    // --- THÔNG TIN CẤU HÌNH (Khớp với ESP32 của bạn) ---
+    const AIO_USER = "minhhuybhh";
+    const AIO_KEY = "aio_jJbI95d3WvDsDpSzW0deq1cfo2Tw";
+    
+    const TEMP_FEED = AIO_USER + "/feeds/temp";
+    const HUM_FEED = AIO_USER + "/feeds/humidity";
+    const LED_FEED = AIO_USER + "/feeds/led";
+
+    // Kết nối MQTT qua WebSocket (Cổng 443 cho SSL)
+    const client = mqtt.connect(`wss://io.adafruit.com:443`, {
+        username: AIO_USER,
+        password: AIO_KEY
+    });
+
+    let ledStatus = 0;
+
+    // --- KHỞI TẠO BIỂU ĐỒ ---
+    const ctx = document.getElementById('myChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Nhiệt độ (°C)',
+                borderColor: '#ff6384',
+                data: [],
+                fill: false
+            }, {
+                label: 'Độ ẩm (%)',
+                borderColor: '#36a2eb',
+                data: [],
+                fill: false
+            }]
+        },
+        options: { responsive: true, scales: { x: { display: true }, y: { beginAtZero: true } } }
+    });
+
+    // --- LOGIC MQTT ---
+    client.on('connect', () => {
+        document.getElementById('status').innerText = "Trạng thái: Đã kết nối Adafruit IO";
+        client.subscribe(TEMP_FEED);
+        client.subscribe(HUM_FEED);
+        client.subscribe(LED_FEED);
+    });
+
+    client.on('message', (topic, message) => {
+        const value = message.toString();
+        const now = new Date().toLocaleTimeString();
+
+        if (topic === TEMP_FEED) {
+            document.getElementById('tempVal').innerText = value;
+            updateChart(0, value, now);
+        } else if (topic === HUM_FEED) {
+            document.getElementById('humVal').innerText = value;
+            updateChart(1, value, now);
+        } else if (topic === LED_FEED) {
+            ledStatus = parseInt(value);
+            const btn = document.getElementById('ledBtn');
+            btn.innerText = ledStatus === 1 ? "TẮT ĐÈN" : "BẬT ĐÈN";
+            btn.style.backgroundColor = ledStatus === 1 ? "#dc3545" : "#28a745";
+        }
+    });
+
+    // Cập nhật biểu đồ
+    function updateChart(datasetIndex, value, time) {
+        if (chart.data.labels.length > 10) { // Giữ lại 10 điểm dữ liệu gần nhất
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+            chart.data.datasets[1].data.shift();
+        }
+        
+        if(datasetIndex === 0) chart.data.datasets[0].data.push(value);
+        else chart.data.datasets[1].data.push(value);
+        
+        if(chart.data.labels.indexOf(time) === -1) chart.data.labels.push(time);
+        chart.update();
+    }
+
+    // Gửi dữ liệu từ Web lên Adafruit (Thủ công)
+    function publishData(type, inputId) {
+        const val = document.getElementById(inputId).value;
+        const topic = type === 'temp' ? TEMP_FEED : HUM_FEED;
+        client.publish(topic, val);
+        console.log(`Đã gửi ${val} tới ${topic}`);
+    }
+
+    // Điều khiển LED
+    function toggleLED() {
+        const nextState = ledStatus === 1 ? "0" : "1";
+        client.publish(LED_FEED, nextState);
+    }
+</script>
+
+</body>
+</html>
