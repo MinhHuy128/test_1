@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>mminh IoT</title>
-    
+    <title>mminh IoT App</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="mminh IoT">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/565/565547.png">
     <link rel="manifest" href="manifest.json">
 
@@ -15,122 +13,91 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        :root { --ios-blue: #007AFF; --ios-green: #34C759; --ios-red: #FF3B30; --bg: #F2F2F7; }
-        body { font-family: -apple-system, system-ui, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #1C1C1E; }
-        h2 { text-align: center; font-weight: 600; margin-top: 40px; }
-        .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        :root { --blue: #007AFF; --green: #34C759; --red: #FF3B30; --bg: #F2F2F7; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+        .card { background: white; border-radius: 15px; padding: 16px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .stat-label { font-size: 13px; color: #8E8E93; text-transform: uppercase; margin-bottom: 4px; }
-        .stat-value { font-size: 24px; font-weight: bold; color: var(--ios-blue); }
-        input { width: 80%; padding: 10px; border: 1px solid #D1D1D6; border-radius: 8px; margin: 8px 0; font-size: 16px; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-        .btn-send { background-color: var(--ios-blue); color: white; }
-        .btn-led { margin-top: 10px; font-size: 18px; }
-        #status { text-align: center; font-size: 12px; color: var(--ios-green); margin-bottom: 10px; }
-        canvas { margin-top: 10px; }
+        .stat-val { font-size: 28px; font-weight: bold; color: var(--blue); margin: 8px 0; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: bold; margin-top: 10px; transition: 0.3s; }
+        .btn-blue { background: var(--blue); color: white; }
+        .btn-led { height: 60px; font-size: 20px; }
+        #status { text-align: center; color: var(--green); font-weight: 500; font-size: 14px; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>mminh IoT Dashboard</h2>
+    <h2 style="text-align:center; margin-top:30px;">mminh Dashboard</h2>
     <p id="status">● Đang kết nối...</p>
 
     <div class="grid">
         <div class="card">
-            <div class="stat-label">Nhiệt độ</div>
-            <div class="stat-value"><span id="tempVal">--</span>°C</div>
-            <input type="number" id="tempInput" value="25">
-            <button class="btn-send" onclick="publishData('temp', 'tempInput')">Đặt</button>
+            <span style="color:gray; font-size:12px;">NHIỆT ĐỘ</span>
+            <div class="stat-val"><span id="tV">--</span>°C</div>
+            <input type="number" id="tI" value="25">
+            <button class="btn-blue" onclick="pub('temp', 'tI')">Gửi</button>
         </div>
         <div class="card">
-            <div class="stat-label">Độ ẩm</div>
-            <div class="stat-value"><span id="humVal">--</span>%</div>
-            <input type="number" id="humInput" value="60">
-            <button class="btn-send" onclick="publishData('humidity', 'humInput')">Đặt</button>
+            <span style="color:gray; font-size:12px;">ĐỘ ẨM</span>
+            <div class="stat-val"><span id="hV">--</span>%</div>
+            <input type="number" id="hI" value="60">
+            <button class="btn-blue" onclick="pub('humidity', 'hI')">Gửi</button>
         </div>
     </div>
 
     <div class="card">
-        <div class="stat-label">Điều khiển thiết bị</div>
-        <button class="btn-led" id="ledBtn" onclick="toggleLED()" style="background-color: var(--ios-green); color: white;">BẬT ĐÈN</button>
+        <button id="lB" class="btn-led" onclick="toggle()" style="background:var(--green); color:white;">BẬT ĐÈN</button>
     </div>
 
     <div class="card">
-        <div class="stat-label">Biểu đồ thời gian thực</div>
-        <canvas id="myChart"></canvas>
+        <canvas id="chart"></canvas>
     </div>
-</div>
 
 <script>
-    const AIO_USER = "minhhuybhh";
-    const AIO_KEY = "aio_jJbI95d3WvDsDpSzW0deq1cfo2Tw";
-    const TEMP_FEED = AIO_USER + "/feeds/temp";
-    const HUM_FEED = AIO_USER + "/feeds/humidity";
-    const LED_FEED = AIO_USER + "/feeds/led";
+    const USER = "minhhuybhh";
+    const KEY = "aio_OugH46leRNuo5n8WbsaA90zfYBg9";
+    const feeds = { temp: `${USER}/feeds/temp`, hum: `${USER}/feeds/humidity`, led: `${USER}/feeds/led` };
 
-    const client = mqtt.connect(`wss://io.adafruit.com:443`, { username: AIO_USER, password: AIO_KEY });
-    let ledStatus = 0;
+    const client = mqtt.connect(`wss://io.adafruit.com:443`, { username: USER, password: KEY });
+    let ledOn = 0;
 
-    // Chart.js Setup
-    const ctx = document.getElementById('myChart').getContext('2d');
+    const ctx = document.getElementById('chart').getContext('2d');
     const chart = new Chart(ctx, {
         type: 'line',
         data: { labels: [], datasets: [
-            { label: 'Temp', borderColor: '#FF3B30', data: [], tension: 0.4 },
-            { label: 'Hum', borderColor: '#007AFF', data: [], tension: 0.4 }
+            { label: 'T', borderColor: '#FF3B30', data: [], tension: 0.4 },
+            { label: 'H', borderColor: '#007AFF', data: [], tension: 0.4 }
         ]},
-        options: { plugins: { legend: { display: false } }, scales: { x: { display: false } } }
+        options: { plugins: { legend: { display: false } } }
     });
 
     client.on('connect', () => {
-        document.getElementById('status').innerText = "● Hệ thống sẵn sàng";
-        client.subscribe([TEMP_FEED, HUM_FEED, LED_FEED]);
+        document.getElementById('status').innerText = "● Trực tuyến";
+        client.subscribe(Object.values(feeds));
     });
 
-    client.on('message', (topic, message) => {
-        const val = message.toString();
-        const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-        if (topic === TEMP_FEED) {
-            document.getElementById('tempVal').innerText = val;
-            updateChart(0, val, now);
-        } else if (topic === HUM_FEED) {
-            document.getElementById('humVal').innerText = val;
-            updateChart(1, val, now);
-        } else if (topic === LED_FEED) {
-            ledStatus = parseInt(val);
-            const btn = document.getElementById('ledBtn');
-            btn.innerText = ledStatus === 1 ? "TẮT ĐÈN" : "BẬT ĐÈN";
-            btn.style.backgroundColor = ledStatus === 1 ? "#FF3B30" : "#34C759";
+    client.on('message', (t, m) => {
+        const v = m.toString();
+        const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        if (t === feeds.temp) { document.getElementById('tV').innerText = v; update(0, v, time); }
+        else if (t === feeds.hum) { document.getElementById('hV').innerText = v; update(1, v, time); }
+        else if (t === feeds.led) {
+            ledOn = parseInt(v);
+            const btn = document.getElementById('lB');
+            btn.innerText = ledOn ? "TẮT ĐÈN" : "BẬT ĐÈN";
+            btn.style.background = ledOn ? "#FF3B30" : "#34C759";
         }
     });
 
-    function updateChart(dsIdx, val, time) {
-        if (chart.data.labels.length > 15) {
-            chart.data.labels.shift();
-            chart.data.datasets[0].data.shift();
-            chart.data.datasets[1].data.shift();
-        }
-        if (dsIdx === 0) chart.data.datasets[0].data.push(val);
-        else chart.data.datasets[1].data.push(val);
+    function update(idx, v, time) {
+        if (chart.data.labels.length > 10) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); chart.data.datasets[1].data.shift(); }
+        chart.data.datasets[idx].data.push(v);
         if (!chart.data.labels.includes(time)) chart.data.labels.push(time);
         chart.update();
     }
 
-    function publishData(type, inputId) {
-        const val = document.getElementById(inputId).value;
-        client.publish(type === 'temp' ? TEMP_FEED : HUM_FEED, val);
-    }
-
-    function toggleLED() {
-        client.publish(LED_FEED, ledStatus === 1 ? "0" : "1");
-    }
-
-    // Đăng ký Service Worker để App chạy mượt
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
-    }
+    function pub(type, id) { client.publish(feeds[type], document.getElementById(id).value); }
+    function toggle() { client.publish(feeds.led, ledOn ? "0" : "1"); }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>
 </html>
